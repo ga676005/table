@@ -263,6 +263,18 @@ const columnFormatter = {
 
 const table = createTable(nameOfDefaultColumns, users, columnFormatter)
 document.body.appendChild(table)
+const columnsContainer = table.querySelector('thead').firstElementChild
+const elementsToPatch = table.querySelectorAll('tbody > tr')
+makeColumnsSwappable(columnsContainer, elementsToPatch)
+
+// makeColumnsDraggable(columnsContainer, {
+//   onMoveEnd: (e) => {
+//   },
+//   elementsToPatch: [
+//     columnsContainer,
+//     ...table.querySelectorAll('tbody > tr')
+//   ]
+// })
 
 function createTable(columns, dataList, columnFormatter) {
   const table = document.createElement('table')
@@ -304,12 +316,10 @@ function createTableRow(columns, dataOfTheRow, columnFormatter) {
     const td = document.createElement('td')
     const columnValue = dataOfTheRow[columnName]
 
-    if (columnFormatter && columnFormatter[columnName]) {
-      const formatterOfColumn = columnFormatter[columnName]
-      if (formatterOfColumn) {
-        const formatted = formatterOfColumn(columnValue)
-        td.append(formatted)
-      }
+    const formatterOfColumn = columnFormatter && columnFormatter[columnName]
+    if (formatterOfColumn) {
+      const formatted = formatterOfColumn(columnValue)
+      td.append(formatted)
     }
     else {
       td.textContent = columnValue
@@ -320,3 +330,178 @@ function createTableRow(columns, dataOfTheRow, columnFormatter) {
 
   return tr
 }
+
+function makeColumnsDraggable(container, options = {}) {
+  const {
+    elementsToPatch = [container],
+    onMoveEnd = (e) => { }
+  } = options
+
+  let isDragging = false
+  let columnsElement = [...container.children]
+  // columnsElement.forEach()
+
+  container.addEventListener('dragstart', e => e.preventDefault())
+
+  document.addEventListener('pointerdown', e => {
+    const draggedColumn = columnsElement.find(el => el === e.target)
+    if (!draggedColumn)
+      return
+
+    isDragging = true
+    const indexOfDraggedColumn = columnsElement.indexOf(draggedColumn)
+    console.log({ indexOfDraggedColumn })
+
+    document.addEventListener('pointermove', handleMove)
+
+    document.addEventListener('pointerup', e => {
+      stopDragging()
+
+      const pointerColumn = columnsElement.find(el => el === e.target)
+      if (!pointerColumn)
+        return
+
+      const indexOfPointerColumn = columnsElement.indexOf(pointerColumn)
+      console.log({ indexOfPointerColumn })
+      if (indexOfDraggedColumn === indexOfPointerColumn)
+        return
+
+      draggedColumn.parentElement.insertBefore(draggedColumn, pointerColumn)
+
+      // swapColumns(elementsToPatch, indexOfDraggedColumn, indexOfPointerColumn)
+
+      columnsElement = [...container.children]
+    }, { once: true })
+
+    document.addEventListener('dragover', e => {
+      console.log('dragover')
+      stopDragging()
+    }, { once: true })
+  })
+
+  function handleMove(e) {
+    if (!isDragging)
+      return
+
+    // because of event propagation 
+    // e.target could be other elements inside the column element 
+    // we want to make sure we find the column element
+    const columnOnPointer = columnsElement.find(el => el === e.target)
+    if (!columnOnPointer)
+      return
+
+    console.log('moving', columnOnPointer)
+  }
+
+  function stopDragging() {
+    isDragging = false
+    console.log('stopDragging')
+    document.removeEventListener('pointermove', handleMove)
+  }
+
+
+  function swapColumns(elements, moveStartIndex, moveEndIndex) {
+    elements.forEach((columnsContainer) => {
+      const columns = columnsContainer.children
+      const moveStartElement = columns[moveStartIndex]
+      const elementToSwap = columns[moveEndIndex]
+
+      // swap with the right column
+      if (moveStartIndex + 1 === moveEndIndex) {
+        columnsContainer.insertBefore(elementToSwap, moveStartElement)
+        return
+      }
+
+      // swap with the left column
+      if (moveStartIndex - 1 === moveEndIndex) {
+        columnsContainer.insertBefore(moveStartElement, elementToSwap)
+        return
+      }
+
+      // we use `insertBefore`, so we need an anchor point to swap
+      // anchorElement could be `undefined` when we swap the last column
+      // MDN says we should pass null,
+      // so the element can be correctly inserted at the end
+      const anchorElement = columns[moveStartIndex + 1] || null
+
+      // move `moveStartElement` before `elementToSwap`
+      // `moveStartElement` is now before `elementToSwap`
+      columnsContainer.insertBefore(moveStartElement, elementToSwap)
+
+      // move `elementToSwap` before the `anchorElement`
+      // because `elementToSwap` is moved to other place
+      // `moveStartElement` becomes to be at the correct position
+      columnsContainer.insertBefore(elementToSwap, anchorElement)
+    })
+  }
+}
+
+
+function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
+  columnsContainer.addEventListener('pointerdown', e => {
+    let columnElements = [...columnsContainer.children]
+    const firstTarget = e.target
+    let firstTargetIndex = columnElements.indexOf(firstTarget)
+
+    function preventDefault(e) {
+      e.preventDefault()
+    }
+
+    document.addEventListener('selectstart', preventDefault)
+
+    if (firstTargetIndex === -1)
+      return
+
+    function handleMove(e) {
+      const secondTarget = e.target
+      const secondTargetIndex = columnElements.indexOf(secondTarget)
+
+      if (secondTargetIndex === -1)
+        return
+
+      if (firstTarget === secondTarget)
+        return
+
+      swapColumns(columnsContainer, firstTargetIndex, secondTargetIndex)
+
+      elementsToPatch.forEach((columnsContainer) => {
+        swapColumns(columnsContainer, firstTargetIndex, secondTargetIndex)
+      })
+
+      columnElements = [...columnsContainer.children]
+      firstTargetIndex = columnElements.indexOf(firstTarget)
+    }
+
+    function swapColumns(container, firstTargetIndex, secondTargetIndex) {
+      const columns = container.children
+      const firstTarget = columns[firstTargetIndex]
+      const secondTarget = columns[secondTargetIndex]
+      const isMoveToLeft = firstTargetIndex > secondTargetIndex
+      const isMoveToRight = firstTargetIndex < secondTargetIndex
+
+      if (isMoveToLeft) {
+        secondTarget.insertAdjacentElement('beforebegin', firstTarget)
+      } else if (isMoveToRight) {
+        secondTarget.insertAdjacentElement('afterend', firstTarget)
+      }
+    }
+
+    columnsContainer.addEventListener('pointermove', handleMove)
+
+    document.addEventListener('pointerup', () => {
+      columnsContainer.removeEventListener('pointermove', handleMove)
+      document.removeEventListener('selectstart', preventDefault)
+    }, { once: true })
+  })
+}
+
+
+
+// function swapTwoArrayElement(array, index1, index2) {
+//   const newArr = [...array]
+//   const tempKey = newArr[index1]
+//   newArr[index1] = newArr[index2]
+//   newArr[index2] = tempKey
+//   return newArr
+// }
+
