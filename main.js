@@ -324,6 +324,7 @@ function createTableRow(columns, dataOfTheRow, columnFormatter) {
 
 function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
   columnsContainer.addEventListener('pointerdown', e => {
+    let lastCursorX = e.clientX
     let columnElements = [...columnsContainer.children]
     const firstTarget = e.target
     let firstTargetIndex = columnElements.indexOf(firstTarget)
@@ -338,6 +339,7 @@ function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
       return
 
     function handleMove(e) {
+      const newCursorX = e.clientX
       const secondTarget = e.target
       const secondTargetIndex = columnElements.indexOf(secondTarget)
 
@@ -347,22 +349,36 @@ function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
       if (firstTarget === secondTarget)
         return
 
-      swapColumns(columnsContainer, firstTargetIndex, secondTargetIndex)
+      const isMoveToLeft = newCursorX < lastCursorX
+      const isMoveToRight = newCursorX > lastCursorX
+      lastCursorX = newCursorX
+
+      const swapColumnInfo = {
+        firstTargetIndex,
+        secondTargetIndex,
+        isMoveToLeft,
+        isMoveToRight
+      }
+
+      swapColumns(columnsContainer, swapColumnInfo)
 
       elementsToPatch.forEach((columnsContainer) => {
-        swapColumns(columnsContainer, firstTargetIndex, secondTargetIndex)
+        swapColumns(columnsContainer, swapColumnInfo)
       })
 
       columnElements = [...columnsContainer.children]
       firstTargetIndex = columnElements.indexOf(firstTarget)
     }
 
-    function swapColumns(container, firstTargetIndex, secondTargetIndex) {
+    function swapColumns(container, {
+      firstTargetIndex,
+      secondTargetIndex,
+      isMoveToLeft,
+      isMoveToRight
+    }) {
       const columns = container.children
       const firstTarget = columns[firstTargetIndex]
       const secondTarget = columns[secondTargetIndex]
-      const isMoveToLeft = firstTargetIndex > secondTargetIndex
-      const isMoveToRight = firstTargetIndex < secondTargetIndex
 
       if (isMoveToLeft) {
         secondTarget.insertAdjacentElement('beforebegin', firstTarget)
