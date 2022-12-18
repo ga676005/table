@@ -1,3 +1,5 @@
+import { copyElementStyleToAnother } from "./helpers.js"
+
 const users = [
   {
     "id": 1,
@@ -262,6 +264,7 @@ const columnFormatter = {
 }
 
 const table = createTable(nameOfDefaultColumns, users, columnFormatter)
+table.classList.add('my-table')
 document.body.appendChild(table)
 const columnsContainer = table.querySelector('thead').firstElementChild
 const elementsToPatch = table.querySelectorAll('tbody > tr')
@@ -323,6 +326,12 @@ function createTableRow(columns, dataOfTheRow, columnFormatter) {
 }
 
 function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
+  columnsContainer.classList.add('columns-container')
+
+  Array.from(columnsContainer.children).forEach((column) => {
+    column.classList.add('column')
+  })
+
   columnsContainer.addEventListener('pointerdown', e => {
     let lastCursorX = e.clientX
     let columnElements = [...columnsContainer.children]
@@ -338,7 +347,31 @@ function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
     if (firstTargetIndex === -1)
       return
 
+    columnsContainer.classList.add('moving')
+    firstTarget.classList.add('moving')
+
+    const firstTargetRect = firstTarget.getBoundingClientRect()
+    const pointerOffset = {
+      x: firstTargetRect.x - e.clientX,
+      y: firstTargetRect.y - e.clientY
+    }
+
+    function createGhost() {
+      const ghost = firstTarget.cloneNode(true)
+      copyElementStyleToAnother(firstTarget, ghost)
+      ghost.style.position = 'fixed'
+      ghost.style.pointerEvents = 'none'
+      ghost.style.left = e.clientX + pointerOffset.x + 'px'
+      ghost.style.top = e.clientY + pointerOffset.y + 'px'
+      document.body.appendChild(ghost)
+      return ghost
+    }
+
+    const ghost = createGhost()
+
     function handleMove(e) {
+      ghost.style.left = e.clientX + pointerOffset.x + 'px'
+      ghost.style.top = e.clientY + pointerOffset.y + 'px'
       const newCursorX = e.clientX
       const secondTarget = e.target
       const secondTargetIndex = columnElements.indexOf(secondTarget)
@@ -387,11 +420,14 @@ function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
       }
     }
 
-    columnsContainer.addEventListener('pointermove', handleMove)
+    document.addEventListener('pointermove', handleMove)
 
     document.addEventListener('pointerup', () => {
-      columnsContainer.removeEventListener('pointermove', handleMove)
+      document.removeEventListener('pointermove', handleMove)
       document.removeEventListener('selectstart', preventDefault)
+      ghost.remove()
+      columnsContainer.classList.remove('moving')
+      firstTarget.classList.remove('moving')
     }, { once: true })
   })
 }
