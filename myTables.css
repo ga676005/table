@@ -13,15 +13,3 @@
 .my-table:hover thead {
   background-color: hsla(0, 0%, 87%, 0.5);
 }
-
-.my-table th {
-  cursor: move;
-}
-
-.columns-container:not(.moving) .column:hover {
-  background-color: hsla(0, 0%, 77%, 0.5);
-}
-
-.column.moving {
-  background-color: hsla(0, 0%, 60%, 0.5);
-}

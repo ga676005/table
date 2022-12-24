@@ -1,0 +1,11 @@
+.column {
+  cursor: move;
+}
+
+.columns-container:not(.moving) .column:hover {
+  background-color: hsla(0, 0%, 77%, 0.5);
+}
+
+.column.moving {
+  background-color: hsla(0, 0%, 60%, 0.5);
+}
