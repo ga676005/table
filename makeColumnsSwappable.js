@@ -8,9 +8,11 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
   })
 
   columnsContainer.addEventListener('pointerdown', e => {
+    const lockedY = e.clientY
+    const firstTarget = e.target
+    const columnsContainerRect = columnsContainer.getBoundingClientRect()
     let lastCursorX = e.clientX
     let columnElements = [...columnsContainer.children]
-    const firstTarget = e.target
     let firstTargetIndex = columnElements.indexOf(firstTarget)
 
     function preventDefault(e) {
@@ -31,24 +33,44 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
       y: firstTargetRect.y - e.clientY
     }
 
+    const ghostXBoundary = {
+      min: columnsContainerRect.x,
+      max: columnsContainerRect.right - firstTargetRect.width
+    }
+
     function createGhost() {
       const ghost = firstTarget.cloneNode(true)
       copyElementStyleToAnother(firstTarget, ghost)
+
+      if (ghost.style.borderCollapse === 'collapse') {
+        const halfBorderWidth = (parseFloat(ghost.style.borderWidth) / 2)
+        ghost.style.borderWidth = halfBorderWidth + 'px'
+      }
+
       ghost.style.position = 'fixed'
       ghost.style.pointerEvents = 'none'
       ghost.style.left = e.clientX + pointerOffset.x + 'px'
       ghost.style.top = e.clientY + pointerOffset.y + 'px'
       document.body.appendChild(ghost)
+
       return ghost
     }
 
     const ghost = createGhost()
 
     function handleMove(e) {
-      ghost.style.left = e.clientX + pointerOffset.x + 'px'
-      ghost.style.top = e.clientY + pointerOffset.y + 'px'
       const newCursorX = e.clientX
-      const secondTarget = e.target
+      let newGhostX = newCursorX + pointerOffset.x
+
+      if (newGhostX < ghostXBoundary.min)
+        newGhostX = ghostXBoundary.min
+      else if (newGhostX > ghostXBoundary.max) {
+        newGhostX = ghostXBoundary.max
+      }
+
+      ghost.style.left = newGhostX + 'px'
+
+      const secondTarget = document.elementFromPoint(newCursorX, lockedY)
       const secondTargetIndex = columnElements.indexOf(secondTarget)
 
       if (secondTargetIndex === -1)

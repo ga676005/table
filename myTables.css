@@ -1,7 +1,7 @@
 .my-table,
 .my-table th,
 .my-table td {
-  border: 1px solid lightgray;
+  border: 2px solid lightgray;
   border-collapse: collapse;
   padding: 8px;
 }
