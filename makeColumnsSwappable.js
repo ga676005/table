@@ -79,15 +79,25 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
       if (firstTarget === secondTarget)
         return
 
+      if (newCursorX === lastCursorX)
+        return
+
       const isMoveToLeft = newCursorX < lastCursorX
       const isMoveToRight = newCursorX > lastCursorX
       lastCursorX = newCursorX
+
+      if (isMoveToLeft && secondTargetIndex > firstTargetIndex
+        || isMoveToRight && secondTargetIndex < firstTargetIndex)
+        return
+
+      const firstTargetRect = firstTarget.getBoundingClientRect()
+      const secondTargetRect = secondTarget.getBoundingClientRect()
 
       const swapColumnInfo = {
         firstTargetIndex,
         secondTargetIndex,
         isMoveToLeft,
-        isMoveToRight
+        isMoveToRight,
       }
 
       swapColumns(columnsContainer, swapColumnInfo)
@@ -95,6 +105,13 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
       elementsToPatch.forEach((columnsContainer) => {
         swapColumns(columnsContainer, swapColumnInfo)
       })
+
+      const newFirstTargetRect = firstTarget.getBoundingClientRect()
+      const newSecondTargetRect = secondTarget.getBoundingClientRect()
+      const firstTargetInvert = firstTargetRect.x - newFirstTargetRect.x
+      const secondTargetInvert = secondTargetRect.x - newSecondTargetRect.x
+
+      animationSwap({ firstTarget, secondTarget, firstTargetInvert, secondTargetInvert })
 
       columnElements = [...columnsContainer.children]
       firstTargetIndex = columnElements.indexOf(firstTarget)
@@ -104,7 +121,7 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
       firstTargetIndex,
       secondTargetIndex,
       isMoveToLeft,
-      isMoveToRight
+      isMoveToRight,
     }) {
       const columns = container.children
       const firstTarget = columns[firstTargetIndex]
@@ -112,9 +129,38 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
 
       if (isMoveToLeft) {
         secondTarget.insertAdjacentElement('beforebegin', firstTarget)
+        console.log('swap left')
+        // animate()
       } else if (isMoveToRight) {
+        console.log('swap right')
         secondTarget.insertAdjacentElement('afterend', firstTarget)
+        // animate()
+      } else {
+        console.log('else')
       }
+
+      // document.body.getBoundingClientRect()
+      // document.body.animate().finished
+    }
+
+    function animationSwap({ firstTarget, secondTarget, firstTargetInvert, secondTargetInvert }) {
+      requestAnimationFrame(() => {
+        firstTarget.animate([
+          { transform: `translateX(${firstTargetInvert}px)` },
+          { transform: `translateX(0px)` },
+        ], {
+          easing: 'ease-in-out',
+          duration: 150
+        })
+
+        secondTarget.animate([
+          { transform: `translateX(${secondTargetInvert}px)` },
+          { transform: `translateX(0px)` },
+        ], {
+          easing: 'ease-in-out',
+          duration: 150
+        })
+      })
     }
 
     document.addEventListener('pointermove', handleMove)
