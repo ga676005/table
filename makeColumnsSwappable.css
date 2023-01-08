@@ -9,3 +9,11 @@
 .column.moving {
   background-color: hsla(0, 0%, 60%, 0.5);
 }
+
+.column.moving.hide-content {
+  color: transparent;
+}
+
+.column.moving.hide-content * {
+  opacity: 0;
+}

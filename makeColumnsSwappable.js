@@ -57,6 +57,7 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
     }
 
     const ghost = createGhost()
+    firstTarget.classList.add('hide-content')
 
     function handleMove(e) {
       const newCursorX = e.clientX
@@ -71,7 +72,7 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
       ghost.style.left = newGhostX + 'px'
 
       const secondTarget = document.elementFromPoint(newCursorX, lockedY)
-      const secondTargetIndex = columnElements.indexOf(secondTarget)
+      let secondTargetIndex = columnElements.indexOf(secondTarget)
 
       if (secondTargetIndex === -1)
         return
@@ -106,15 +107,22 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
         swapColumns(columnsContainer, swapColumnInfo)
       })
 
+      columnElements = [...columnsContainer.children]
+      firstTargetIndex = columnElements.indexOf(firstTarget)
+      secondTargetIndex = columnElements.indexOf(secondTarget)
+
       const newFirstTargetRect = firstTarget.getBoundingClientRect()
       const newSecondTargetRect = secondTarget.getBoundingClientRect()
       const firstTargetInvert = firstTargetRect.x - newFirstTargetRect.x
       const secondTargetInvert = secondTargetRect.x - newSecondTargetRect.x
 
-      animationSwap({ firstTarget, secondTarget, firstTargetInvert, secondTargetInvert })
-
-      columnElements = [...columnsContainer.children]
-      firstTargetIndex = columnElements.indexOf(firstTarget)
+      animateSwap({
+        columnsContainers: [columnsContainer, ...elementsToPatch],
+        firstTargetIndex,
+        secondTargetIndex,
+        firstTargetInvert,
+        secondTargetInvert,
+      })
     }
 
     function swapColumns(container, {
@@ -129,38 +137,9 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
 
       if (isMoveToLeft) {
         secondTarget.insertAdjacentElement('beforebegin', firstTarget)
-        console.log('swap left')
-        // animate()
       } else if (isMoveToRight) {
-        console.log('swap right')
         secondTarget.insertAdjacentElement('afterend', firstTarget)
-        // animate()
-      } else {
-        console.log('else')
       }
-
-      // document.body.getBoundingClientRect()
-      // document.body.animate().finished
-    }
-
-    function animationSwap({ firstTarget, secondTarget, firstTargetInvert, secondTargetInvert }) {
-      requestAnimationFrame(() => {
-        firstTarget.animate([
-          { transform: `translateX(${firstTargetInvert}px)` },
-          { transform: `translateX(0px)` },
-        ], {
-          easing: 'ease-in-out',
-          duration: 150
-        })
-
-        secondTarget.animate([
-          { transform: `translateX(${secondTargetInvert}px)` },
-          { transform: `translateX(0px)` },
-        ], {
-          easing: 'ease-in-out',
-          duration: 150
-        })
-      })
     }
 
     document.addEventListener('pointermove', handleMove)
@@ -171,7 +150,34 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
       ghost.remove()
       columnsContainer.classList.remove('moving')
       firstTarget.classList.remove('moving')
+      firstTarget.classList.remove('hide-content')
     }, { once: true })
   })
 }
 
+function animateSwap({
+  columnsContainers,
+  firstTargetIndex,
+  secondTargetIndex,
+  firstTargetInvert,
+  secondTargetInvert
+}) {
+  function animate(element, invert) {
+    element.animate([
+      { transform: `translateX(${invert}px)` },
+      { transform: `translateX(0px)` },
+    ], {
+      easing: 'ease-in-out',
+      duration: 150
+    })
+  }
+
+  columnsContainers.forEach((columnsContainer) => {
+    const columns = columnsContainer.children
+    const firstTarget = columns[firstTargetIndex]
+    const secondTarget = columns[secondTargetIndex]
+
+    animate(firstTarget, firstTargetInvert)
+    animate(secondTarget, secondTargetInvert)
+  })
+}
