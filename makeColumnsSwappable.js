@@ -2,6 +2,7 @@ import { copyElementStyleToAnother } from "./helpers.js"
 
 export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
   columnsContainer.classList.add('columns-container')
+  elementsToPatch = [columnsContainer, ...elementsToPatch]
 
   Array.from(columnsContainer.children).forEach((column) => {
     column.classList.add('column')
@@ -10,15 +11,11 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
   columnsContainer.addEventListener('pointerdown', e => {
     const lockedY = e.clientY
     const firstTarget = e.target
-    const columnsContainerRect = columnsContainer.getBoundingClientRect()
     let lastCursorX = e.clientX
     let columnElements = [...columnsContainer.children]
     let firstTargetIndex = columnElements.indexOf(firstTarget)
 
-    function preventDefault(e) {
-      e.preventDefault()
-    }
-
+    // prevent text selection when moving columns
     document.addEventListener('selectstart', preventDefault)
 
     if (firstTargetIndex === -1)
@@ -27,60 +24,23 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
     columnsContainer.classList.add('moving')
     firstTarget.classList.add('moving')
 
-    const firstTargetRect = firstTarget.getBoundingClientRect()
-    const pointerOffset = {
-      x: firstTargetRect.x - e.clientX,
-      y: firstTargetRect.y - e.clientY
-    }
+    const ghost = createGhostColumn({
+      firstTarget,
+      columnsContainer,
+      pointerdownEvent: e,
+    })
 
-    const ghostXBoundary = {
-      min: columnsContainerRect.x,
-      max: columnsContainerRect.right - firstTargetRect.width
-    }
-
-    function createGhost() {
-      const ghost = firstTarget.cloneNode(true)
-      copyElementStyleToAnother(firstTarget, ghost)
-
-      if (ghost.style.borderCollapse === 'collapse') {
-        const halfBorderWidth = (parseFloat(ghost.style.borderWidth) / 2)
-        ghost.style.borderWidth = halfBorderWidth + 'px'
-      }
-
-      ghost.style.position = 'fixed'
-      ghost.style.pointerEvents = 'none'
-      ghost.style.left = e.clientX + pointerOffset.x + 'px'
-      ghost.style.top = e.clientY + pointerOffset.y + 'px'
-      document.body.appendChild(ghost)
-
-      return ghost
-    }
-
-    const ghost = createGhost()
     firstTarget.classList.add('hide-content')
 
     function handleMove(e) {
+      ghost.move(e)
       const newCursorX = e.clientX
-      let newGhostX = newCursorX + pointerOffset.x
-
-      if (newGhostX < ghostXBoundary.min)
-        newGhostX = ghostXBoundary.min
-      else if (newGhostX > ghostXBoundary.max) {
-        newGhostX = ghostXBoundary.max
-      }
-
-      ghost.style.left = newGhostX + 'px'
-
       const secondTarget = document.elementFromPoint(newCursorX, lockedY)
       let secondTargetIndex = columnElements.indexOf(secondTarget)
 
-      if (secondTargetIndex === -1)
-        return
-
-      if (firstTarget === secondTarget)
-        return
-
-      if (newCursorX === lastCursorX)
+      if (secondTargetIndex === -1
+        || firstTarget === secondTarget
+        || newCursorX === lastCursorX)
         return
 
       const isMoveToLeft = newCursorX < lastCursorX
@@ -91,55 +51,21 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
         || isMoveToRight && secondTargetIndex < firstTargetIndex)
         return
 
-      const firstTargetRect = firstTarget.getBoundingClientRect()
-      const secondTargetRect = secondTarget.getBoundingClientRect()
+      const animateSwap = makeAnimateSwapFunc(firstTarget, secondTarget, elementsToPatch)
 
-      const swapColumnInfo = {
+      swapColumns({
+        columnsContainers: elementsToPatch,
         firstTargetIndex,
         secondTargetIndex,
         isMoveToLeft,
         isMoveToRight,
-      }
-
-      swapColumns(columnsContainer, swapColumnInfo)
-
-      elementsToPatch.forEach((columnsContainer) => {
-        swapColumns(columnsContainer, swapColumnInfo)
       })
 
       columnElements = [...columnsContainer.children]
       firstTargetIndex = columnElements.indexOf(firstTarget)
       secondTargetIndex = columnElements.indexOf(secondTarget)
 
-      const newFirstTargetRect = firstTarget.getBoundingClientRect()
-      const newSecondTargetRect = secondTarget.getBoundingClientRect()
-      const firstTargetInvert = firstTargetRect.x - newFirstTargetRect.x
-      const secondTargetInvert = secondTargetRect.x - newSecondTargetRect.x
-
-      animateSwap({
-        columnsContainers: [columnsContainer, ...elementsToPatch],
-        firstTargetIndex,
-        secondTargetIndex,
-        firstTargetInvert,
-        secondTargetInvert,
-      })
-    }
-
-    function swapColumns(container, {
-      firstTargetIndex,
-      secondTargetIndex,
-      isMoveToLeft,
-      isMoveToRight,
-    }) {
-      const columns = container.children
-      const firstTarget = columns[firstTargetIndex]
-      const secondTarget = columns[secondTargetIndex]
-
-      if (isMoveToLeft) {
-        secondTarget.insertAdjacentElement('beforebegin', firstTarget)
-      } else if (isMoveToRight) {
-        secondTarget.insertAdjacentElement('afterend', firstTarget)
-      }
+      animateSwap(firstTargetIndex, secondTargetIndex)
     }
 
     document.addEventListener('pointermove', handleMove)
@@ -155,14 +81,85 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
   })
 }
 
-function animateSwap({
+function swapColumns({
   columnsContainers,
   firstTargetIndex,
   secondTargetIndex,
-  firstTargetInvert,
-  secondTargetInvert
+  isMoveToLeft,
+  isMoveToRight,
 }) {
-  function animate(element, invert) {
+  columnsContainers.forEach((columnsContainer) => {
+    const columns = columnsContainer.children
+    const firstTarget = columns[firstTargetIndex]
+    const secondTarget = columns[secondTargetIndex]
+
+    if (isMoveToLeft) {
+      secondTarget.insertAdjacentElement('beforebegin', firstTarget)
+    } else if (isMoveToRight) {
+      secondTarget.insertAdjacentElement('afterend', firstTarget)
+    }
+  })
+}
+
+function createGhostColumn({ firstTarget, pointerdownEvent, columnsContainer }) {
+  const ghost = firstTarget.cloneNode(true)
+  copyElementStyleToAnother(firstTarget, ghost)
+
+  // handle edge case that border style is not cloned as expected
+  if (ghost.style.borderCollapse === 'collapse') {
+    const halfBorderWidth = (parseFloat(ghost.style.borderWidth) / 2)
+    ghost.style.borderWidth = halfBorderWidth + 'px'
+  }
+
+  // calculate the pointer `x` and `y` distance
+  // from `pointerdown` to `firstTarget`
+  const firstTargetRect = firstTarget.getBoundingClientRect()
+  const pointerOffset = {
+    x: pointerdownEvent.clientX - firstTargetRect.x,
+    y: pointerdownEvent.clientY - firstTargetRect.y
+  }
+
+  // set ghost initial position
+  ghost.style.position = 'fixed'
+  ghost.style.pointerEvents = 'none'
+  ghost.style.left = pointerdownEvent.clientX - pointerOffset.x + 'px'
+  ghost.style.top = pointerdownEvent.clientY - pointerOffset.y + 'px'
+
+  // calculate the boundary that ghost can move
+  const columnsContainerRect = columnsContainer.getBoundingClientRect()
+  const ghostXBoundary = {
+    min: columnsContainerRect.x,
+    max: columnsContainerRect.right - firstTargetRect.width
+  }
+
+  // move ghost within the boundary on `pointermove`
+  function moveGhost(pointermoveEvent) {
+    const newCursorX = pointermoveEvent.clientX
+    let newGhostX = newCursorX - pointerOffset.x
+
+    if (newGhostX < ghostXBoundary.min) {
+      newGhostX = ghostXBoundary.min
+    } else if (newGhostX > ghostXBoundary.max) {
+      newGhostX = ghostXBoundary.max
+    }
+
+    ghost.style.left = newGhostX + 'px'
+  }
+
+  ghost.move = moveGhost
+  document.body.appendChild(ghost)
+
+  return ghost
+}
+
+// need to be called before `swapColumns`
+// to store the current rect information before swapping
+function makeAnimateSwapFunc(firstTarget, secondTarget, columnsContainers) {
+  const firstTargetRect = firstTarget.getBoundingClientRect()
+  const secondTargetRect = secondTarget.getBoundingClientRect()
+
+  // use web animation api to animate element
+  function flip(element, invert) {
     element.animate([
       { transform: `translateX(${invert}px)` },
       { transform: `translateX(0px)` },
@@ -172,12 +169,28 @@ function animateSwap({
     })
   }
 
-  columnsContainers.forEach((columnsContainer) => {
-    const columns = columnsContainer.children
-    const firstTarget = columns[firstTargetIndex]
-    const secondTarget = columns[secondTargetIndex]
+  // need to be called after `swapColumns` with
+  // the latest `firstTargetIndex` and `secondTargetIndex`
+  function animateSwap(firstTargetIndex, secondTargetIndex) {
+    // calculate values to invert for FLIP https://aerotwist.com/blog/flip-your-animations/
+    const newFirstTargetRect = firstTarget.getBoundingClientRect()
+    const newSecondTargetRect = secondTarget.getBoundingClientRect()
+    const firstTargetInvert = firstTargetRect.x - newFirstTargetRect.x
+    const secondTargetInvert = secondTargetRect.x - newSecondTargetRect.x
 
-    animate(firstTarget, firstTargetInvert)
-    animate(secondTarget, secondTargetInvert)
-  })
+    columnsContainers.forEach((columnsContainer) => {
+      const columns = columnsContainer.children
+      const firstTarget = columns[firstTargetIndex]
+      const secondTarget = columns[secondTargetIndex]
+
+      flip(firstTarget, firstTargetInvert)
+      flip(secondTarget, secondTargetInvert)
+    })
+  }
+
+  return animateSwap
+}
+
+function preventDefault(e) {
+  e.preventDefault()
 }

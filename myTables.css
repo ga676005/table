@@ -1,9 +1,24 @@
-.my-table,
+/* .my-table,
 .my-table th,
 .my-table td {
   border: 2px solid lightgray;
   border-collapse: collapse;
   padding: 8px;
+} */
+
+.my-table {
+  border-collapse: collapse;
+}
+
+.my-table th,
+.my-table td {
+  padding: 8px;
+
+  /*
+    to workaround border is not animated when
+    `border-collapse: collapse` is set on table
+  */
+  box-shadow: inset 0px 0px 0px 1px lightgray;
 }
 
 .my-table thead {
