@@ -1,5 +1,7 @@
 import { createJSONPlaceholderTable } from "./myTables.js"
 
+const container = document.querySelector('.container')
 const jsonPlaceholderTable = createJSONPlaceholderTable()
-document.body.appendChild(jsonPlaceholderTable)
+
+container.appendChild(jsonPlaceholderTable)
 

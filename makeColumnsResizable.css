@@ -1,0 +1,27 @@
+.resizable-column-wrapper {
+  /* make its content layout horizontally */
+  display: flex;
+}
+
+.resizable-column-content {
+  /* makes this element can grow and shrink within the free space of flexbox */
+  flex: 1;
+  text-align: left;
+  padding: 8px;
+}
+
+.resizable-column-handle {
+  width: 20px;
+  background: rgba(255, 0, 0, 0.154);
+  cursor: col-resize;
+
+  /* makes this element not to shrink */
+  flex-shrink: 0;
+}
+
+.line-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

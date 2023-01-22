@@ -1,15 +1,4 @@
 import { createTable } from "./createTable.js"
-import { makeColumnsSwappable } from "./makeColumnsSwappable.js"
-
-function createColumnsSwappableTable(nameOfDefaultColumns, users, columnFormatter) {
-  const table = createTable(nameOfDefaultColumns, users, columnFormatter)
-
-  const columnsContainer = table.querySelector('thead').firstElementChild
-  const elementsToPatch = table.querySelectorAll('tbody > tr')
-  makeColumnsSwappable(columnsContainer, elementsToPatch)
-
-  return table
-}
 
 export function createJSONPlaceholderTable() {
   const users = [
@@ -275,7 +264,18 @@ export function createJSONPlaceholderTable() {
     }
   }
 
-  const table = createColumnsSwappableTable(nameOfDefaultColumns, users, columnFormatter)
+  const table = createTable(nameOfDefaultColumns, users, {
+    columnFormatter,
+    resizeOptions: {
+      enable: true,
+      columnsMinWidth: {
+        id: 50
+      }
+    },
+    swapOptions: {
+      enable: true,
+    },
+  })
   table.classList.add('my-table')
 
   return table

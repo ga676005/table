@@ -1,16 +1,16 @@
 import { copyElementStyleToAnother } from "./helpers.js"
 
 export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
-  columnsContainer.classList.add('columns-container')
+  columnsContainer.classList.add('swappable-columns-container')
   elementsToPatch = [columnsContainer, ...elementsToPatch]
 
   Array.from(columnsContainer.children).forEach((column) => {
-    column.classList.add('column')
+    column.classList.add('swappable-column')
   })
 
   columnsContainer.addEventListener('pointerdown', e => {
     const lockedY = e.clientY
-    const firstTarget = e.target
+    const firstTarget = e.target.closest('.swappable-column')
     let lastCursorX = e.clientX
     let columnElements = [...columnsContainer.children]
     let firstTargetIndex = columnElements.indexOf(firstTarget)
@@ -30,24 +30,78 @@ export function makeColumnsSwappable(columnsContainer, elementsToPatch = []) {
       pointerdownEvent: e,
     })
 
+    // add style to hide `firstTarget` content AFTER ghost has been created
+    // otherwise the ghost will also have no content
     firstTarget.classList.add('hide-content')
 
+    // when ghost touches the container edge, we will start scrolling 
+    // we want to handle swap in this case as well
+    ghost.element.addEventListener('custom:autoscroll', (e) => {
+      const { direction, predictedGhostEdgeX } = e.detail
+
+      handleSwap({
+        isMoveToLeft: direction === 'left',
+        isMoveToRight: direction === 'right',
+        ghostLeft: predictedGhostEdgeX.left,
+        ghostRight: predictedGhostEdgeX.right
+      })
+    })
+
+    document.body.appendChild(ghost.element)
+
+
+    function getSecondTarget(x, y) {
+      if (!x || !y)
+        return
+
+      return document.elementFromPoint(x, y)?.closest('.swappable-column')
+    }
+
     function handleMove(e) {
-      ghost.move(e)
       const newCursorX = e.clientX
-      const secondTarget = document.elementFromPoint(newCursorX, lockedY)
+      const isMoveToLeft = newCursorX < lastCursorX
+      const isMoveToRight = newCursorX > lastCursorX
+      if (newCursorX === lastCursorX)
+        return
+
+      lastCursorX = newCursorX
+
+      const { left, right } = ghost.move(e)
+
+      handleSwap({
+        isMoveToLeft,
+        isMoveToRight,
+        ghostLeft: left,
+        ghostRight: right,
+        cursorX: newCursorX
+      })
+
+    }
+
+    function handleSwap({
+      isMoveToLeft,
+      isMoveToRight,
+      ghostLeft,
+      ghostRight,
+      cursorX
+    } = {}) {
+      // control how much overlap between `ghost` and `secondTarget` before swap
+      const OFFSET = 20
+
+      let secondTarget
+      if (isMoveToLeft) {
+        secondTarget = getSecondTarget(ghostLeft + OFFSET, lockedY)
+      }
+      else if (isMoveToRight) {
+        secondTarget = getSecondTarget(ghostRight - OFFSET, lockedY)
+      }
+      secondTarget = secondTarget ?? getSecondTarget(cursorX, lockedY)
+
       let secondTargetIndex = columnElements.indexOf(secondTarget)
 
       if (secondTargetIndex === -1
         || firstTarget === secondTarget
-        || newCursorX === lastCursorX)
-        return
-
-      const isMoveToLeft = newCursorX < lastCursorX
-      const isMoveToRight = newCursorX > lastCursorX
-      lastCursorX = newCursorX
-
-      if (isMoveToLeft && secondTargetIndex > firstTargetIndex
+        || isMoveToLeft && secondTargetIndex > firstTargetIndex
         || isMoveToRight && secondTargetIndex < firstTargetIndex)
         return
 
@@ -95,7 +149,8 @@ function swapColumns({
 
     if (isMoveToLeft) {
       secondTarget.insertAdjacentElement('beforebegin', firstTarget)
-    } else if (isMoveToRight) {
+    }
+    else if (isMoveToRight) {
       secondTarget.insertAdjacentElement('afterend', firstTarget)
     }
   })
@@ -103,7 +158,8 @@ function swapColumns({
 
 function createGhostColumn({ firstTarget, pointerdownEvent, columnsContainer }) {
   const ghost = firstTarget.cloneNode(true)
-  copyElementStyleToAnother(firstTarget, ghost)
+  const { width: firstTargetWidth } = copyElementStyleToAnother(firstTarget, ghost)
+  const firstTargetRect = firstTarget.getBoundingClientRect()
 
   // handle edge case that border style is not cloned as expected
   if (ghost.style.borderCollapse === 'collapse') {
@@ -111,26 +167,115 @@ function createGhostColumn({ firstTarget, pointerdownEvent, columnsContainer }) 
     ghost.style.borderWidth = halfBorderWidth + 'px'
   }
 
-  // calculate the pointer `x` and `y` distance
-  // from `pointerdown` to `firstTarget`
-  const firstTargetRect = firstTarget.getBoundingClientRect()
-  const pointerOffset = {
-    x: pointerdownEvent.clientX - firstTargetRect.x,
-    y: pointerdownEvent.clientY - firstTargetRect.y
+  function getGhostBoundary({ columnsContainer, firstTargetRect, firstTargetWidth }) {
+    const SPARE_SPACE_BETWEEN_GHOST_AND_CONTAINER = 40
+    firstTargetWidth = parseFloat(firstTargetWidth)
+
+    // the scrollable container might not be
+    // the direct container of columns
+    const container = getHorizontalScrollableContainer(columnsContainer) || columnsContainer
+    const containerRect = container.getBoundingClientRect()
+    const containerStyle = getComputedStyle(container)
+
+    const containerContentBoxLeft = containerRect.x
+      + parseFloat(containerStyle.paddingLeft)
+      + parseFloat(containerStyle.borderLeftWidth)
+
+    //  clientWidth is content box width + padding width
+    const containerContentBoxWidth = container.clientWidth
+      - parseFloat(containerStyle.paddingLeft)
+      - parseFloat(containerStyle.paddingRight)
+
+    const firstTargetIsBiggerThanContainer =
+      firstTargetWidth > (containerContentBoxWidth - SPARE_SPACE_BETWEEN_GHOST_AND_CONTAINER)
+
+    const ghostWidth = firstTargetIsBiggerThanContainer
+      ? containerContentBoxWidth - SPARE_SPACE_BETWEEN_GHOST_AND_CONTAINER
+      : firstTargetRect.width
+
+    const ghostXBoundary = {
+      min: containerContentBoxLeft,
+      max: firstTargetIsBiggerThanContainer
+        ? containerContentBoxLeft + SPARE_SPACE_BETWEEN_GHOST_AND_CONTAINER
+        : containerContentBoxLeft + containerContentBoxWidth - firstTargetRect.width,
+    }
+
+    // the predicted edge the ghost can go
+    // so we don't need to constantly get the latest position of ghost
+    // on auto:scroll when we know it's already on the edge
+    // containerContentBoxLeft is the point on container element
+    // Math.ceil() and Math.floor() are used to make the value
+    // narrower within the container
+    const predictedGhostEdgeX = {
+      left: Math.ceil(containerContentBoxLeft),
+      right: Math.floor(containerContentBoxLeft + container.clientWidth)
+    }
+
+    return {
+      ghostXBoundary,
+      predictedGhostEdgeX,
+      container,
+      firstTargetIsBiggerThanContainer,
+      SPARE_SPACE_BETWEEN_GHOST_AND_CONTAINER,
+      ghostWidth
+    }
   }
 
-  // set ghost initial position
-  ghost.style.position = 'fixed'
-  ghost.style.pointerEvents = 'none'
-  ghost.style.left = pointerdownEvent.clientX - pointerOffset.x + 'px'
-  ghost.style.top = pointerdownEvent.clientY - pointerOffset.y + 'px'
+  const {
+    ghostXBoundary,
+    predictedGhostEdgeX,
+    container,
+    firstTargetIsBiggerThanContainer,
+    SPARE_SPACE_BETWEEN_GHOST_AND_CONTAINER,
+    ghostWidth
+  } = getGhostBoundary({ columnsContainer, firstTargetRect, firstTargetWidth })
 
-  // calculate the boundary that ghost can move
-  const columnsContainerRect = columnsContainer.getBoundingClientRect()
-  const ghostXBoundary = {
-    min: columnsContainerRect.x,
-    max: columnsContainerRect.right - firstTargetRect.width
+  if (firstTargetIsBiggerThanContainer) {
+    ghost.style.minWidth = 'unset'
+    ghost.style.width = ghostWidth + 'px'
   }
+
+
+  function setGhostPosition({
+    firstTargetRect,
+    ghostXBoundary,
+    firstTargetIsBiggerThanContainer,
+    SPARE_SPACE_BETWEEN_GHOST_AND_CONTAINER
+  }) {
+    let initialGhostX = firstTargetRect.left
+
+    if (initialGhostX < ghostXBoundary.min) {
+      initialGhostX = ghostXBoundary.min
+    }
+    else if (initialGhostX > ghostXBoundary.max) {
+      initialGhostX = ghostXBoundary.max
+    }
+
+    if (firstTargetIsBiggerThanContainer) {
+      initialGhostX = ghostXBoundary.min + (SPARE_SPACE_BETWEEN_GHOST_AND_CONTAINER / 2)
+    }
+
+    ghost.style.position = 'fixed'
+    ghost.style.pointerEvents = 'none'
+    ghost.style.left = initialGhostX + 'px'
+    ghost.style.top = firstTargetRect.top + 'px'
+
+    const pointerOffset = {
+      x: pointerdownEvent.clientX - initialGhostX,
+      y: pointerdownEvent.clientY - firstTargetRect.top
+    }
+
+    return { pointerOffset }
+  }
+
+  const { pointerOffset } = setGhostPosition({
+    firstTargetRect,
+    ghostXBoundary,
+    firstTargetIsBiggerThanContainer,
+    SPARE_SPACE_BETWEEN_GHOST_AND_CONTAINER
+  })
+
+  const { startScroll, stopScroll, isScrollable } = getScrollContainerFunc(container)
 
   // move ghost within the boundary on `pointermove`
   function moveGhost(pointermoveEvent) {
@@ -139,17 +284,89 @@ function createGhostColumn({ firstTarget, pointerdownEvent, columnsContainer }) 
 
     if (newGhostX < ghostXBoundary.min) {
       newGhostX = ghostXBoundary.min
-    } else if (newGhostX > ghostXBoundary.max) {
+      isScrollable && startScroll('left')
+    }
+    else if (newGhostX > ghostXBoundary.max) {
       newGhostX = ghostXBoundary.max
+      isScrollable && startScroll('right')
+    }
+    else {
+      isScrollable && stopScroll()
     }
 
     ghost.style.left = newGhostX + 'px'
+
+    return {
+      left: newGhostX,
+      right: newGhostX + ghostWidth,
+    }
   }
 
-  ghost.move = moveGhost
-  document.body.appendChild(ghost)
+  function getScrollContainerFunc(container) {
+    if (!container)
+      return { isScrollable: false }
 
-  return ghost
+    let scrollId
+    let currentDirection
+    let speed = 5
+    const INCREASE_SPEED = 0.5
+
+    function startScroll(direction) {
+      // increase scroll speed if moving towards same direction
+      if (currentDirection === direction) {
+        speed += INCREASE_SPEED
+        return
+      }
+
+      stopScroll()
+      currentDirection = direction
+
+      scrollId = setInterval(() => {
+        requestAnimationFrame(() => {
+          if (direction === 'left') {
+            container.scrollLeft -= speed
+          }
+          else if (direction === 'right') {
+            container.scrollLeft += speed
+          }
+
+          // use a custom event to send a signal out that an auto scroll has happened
+          // so we can make reaction to this action elsewhere
+          const event = new CustomEvent('custom:autoscroll', {
+            detail: {
+              direction,
+              predictedGhostEdgeX
+            }
+          })
+          ghost.dispatchEvent(event)
+        })
+      }, 20);
+    }
+
+    function stopScroll() {
+      if (!scrollId)
+        return
+
+      clearInterval(scrollId)
+      scrollId = null
+      currentDirection = null
+      speed = 5
+    }
+
+    return { startScroll, stopScroll, isScrollable: true }
+  }
+
+
+  function remove() {
+    ghost.remove()
+    stopScroll()
+  }
+
+  return {
+    element: ghost,
+    move: moveGhost,
+    remove,
+  }
 }
 
 // need to be called before `swapColumns`
@@ -193,4 +410,14 @@ function makeAnimateSwapFunc(firstTarget, secondTarget, columnsContainers) {
 
 function preventDefault(e) {
   e.preventDefault()
+}
+
+function getHorizontalScrollableContainer(element) {
+  if (!element)
+    return
+
+  if (element.scrollWidth > element.clientWidth)
+    return element
+
+  return getHorizontalScrollableContainer(element.parentElement)
 }

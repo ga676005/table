@@ -1,19 +1,19 @@
-.column {
+.swappable-column {
   cursor: move;
 }
 
-.columns-container:not(.moving) .column:hover {
+.swappable-columns-container:not(.moving) .column:hover {
   background-color: hsla(0, 0%, 77%, 0.5);
 }
 
-.column.moving {
+.swappable-column.moving {
   background-color: hsla(0, 0%, 60%, 0.5);
 }
 
-.column.moving.hide-content {
+.swappable-column.moving.hide-content {
   color: transparent;
 }
 
-.column.moving.hide-content * {
+.swappable-column.moving.hide-content * {
   opacity: 0;
 }

@@ -11,4 +11,10 @@ export function copyElementStyleToAnother(aElement, bElement) {
 
   // 👇️ Assign css styles to element
   bElement.style.cssText = cssText;
+
+  return styles
+}
+
+export function preventDefault(e) {
+  e.preventDefault()
 }

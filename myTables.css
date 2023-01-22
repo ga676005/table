@@ -6,19 +6,42 @@
   padding: 8px;
 } */
 
+*,
+::before,
+::after {
+  box-sizing: border-box;
+}
+
+/* to test that  */
+.container {
+  border: 5px solid red;
+  padding-left: 10px;
+  padding-right: 20px;
+  width: 800px;
+  height: 400px;
+  overflow: auto;
+}
+
 .my-table {
   border-collapse: collapse;
 }
 
+th {
+  /* padding: 10px; */
+  background: blanchedalmond;
+}
+
 .my-table th,
 .my-table td {
-  padding: 8px;
-
   /*
     to workaround border is not animated when
     `border-collapse: collapse` is set on table
   */
   box-shadow: inset 0px 0px 0px 1px lightgray;
+}
+
+.my-table td {
+  padding: 8px;
 }
 
 .my-table thead {
